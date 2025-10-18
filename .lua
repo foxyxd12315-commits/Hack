@@ -7,12 +7,21 @@ local Players = game:GetService("Players")
 local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 
+-- 1. MODIFICACIÓN CRÍTICA: Esperar al LocalPlayer
+-- Esto asegura que el script no falle si se ejecuta demasiado pronto.
 local LocalPlayer = Players.LocalPlayer
-if not LocalPlayer then return end
+if not LocalPlayer then
+    -- Si LocalPlayer es nil (lo que no debería pasar en la mayoría de los ejecutores, pero es buena práctica)
+    -- Esperamos un breve momento o simplemente retornamos si el entorno es hostil.
+    repeat task.wait() until Players.LocalPlayer
+    LocalPlayer = Players.LocalPlayer
+    if not LocalPlayer then return end -- Si todavía no existe, el script termina aquí.
+end
 
+-- Esperamos explícitamente por el PlayerGui
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- 2. FUNCIÓN PARA CREAR LA INTERFAZ VISUAL (Mantenida igual para diseño)
+-- 2. FUNCIÓN PARA CREAR LA INTERFAZ VISUAL (Sin cambios en el diseño, solo la ejecución)
 local function crearHubUI()
     -- ********** ESTRUCTURA PRINCIPAL **********
     local Hub = Instance.new("Frame")
@@ -23,11 +32,11 @@ local function crearHubUI()
     Hub.Size = UDim2.new(0.3, 0, 0.5, 0) 
     Hub.AnchorPoint = Vector2.new(0.5, 0.5)
     Hub.Position = UDim2.new(0.5, 0, 0.5, 0) 
-    Hub.BackgroundColor3 = Color3.new(0, 0, 0) -- Negro
+    Hub.BackgroundColor3 = Color3.new(0, 0, 0) 
     Hub.BorderSizePixel = 4
     Hub.Active = true 
     Hub.ZIndex = 10 
-    Hub.Visible = false -- Oculto hasta la contraseña
+    Hub.Visible = false 
     
     -- Borde redondeado (UICorner)
     local Corner = Instance.new("UICorner")
@@ -84,14 +93,18 @@ local function crearHubUI()
     local Btn_Abrir = crearBoton("Btn_Abrir", "Opcion tres (Abrir)")
 
     -- ********** EFECTO RAINBOW EN EL BORDE **********
+    -- Usamos task.spawn para no bloquear la ejecución si el RunService falla
     local function rainbowBorder(uiElement)
-        local hue = 0
-        RunService.RenderStepped:Connect(function()
-            hue = hue + 0.02
-            if hue >= 1 then
-                hue = 0
+        task.spawn(function()
+            local hue = 0
+            while uiElement.Parent do -- Bucle para correr mientras el elemento exista
+                hue = hue + 0.02
+                if hue >= 1 then
+                    hue = 0
+                end
+                uiElement.BorderColor3 = Color3.fromHSV(hue, 1, 1)
+                RunService.RenderStepped:Wait() -- Espera al siguiente frame de renderizado
             end
-            uiElement.BorderColor3 = Color3.fromHSV(hue, 1, 1)
         end)
     end
     rainbowBorder(Hub) 
@@ -111,12 +124,18 @@ local function crearHubUI()
         end
     end)
     
-    -- Opción dos (Key) - REDIRECCIÓN DE URL (Nueva Lógica)
+    -- Opción dos (Key) - REDIRECCIÓN DE URL (Envuelto en pcall para manejar fallas)
     Btn_Key.MouseButton1Click:Connect(function()
         if hub_abierto then
-            -- Redirección al enlace
-            GuiService:OpenBrowserWindow(URL_KEY)
-            print("🌐 Abriendo URL para obtener la Key: " .. URL_KEY)
+            local success, err = pcall(function()
+                -- Redirección al enlace. Notar que OpenBrowserWindow puede estar desactivado/parcheado.
+                GuiService:OpenBrowserWindow(URL_KEY)
+            end)
+            if success then
+                print("🌐 Abriendo URL para obtener la Key: " .. URL_KEY)
+            else
+                warn("🌐 No se pudo abrir el navegador. Error: " .. err)
+            end
         else
             warn("Hub bloqueado. Introduce la contraseña primero.")
         end
@@ -128,6 +147,20 @@ local function crearHubUI()
             Hub.Visible = not Hub.Visible
         else
             warn("Hub bloqueado. Introduce la contraseña primero.")
+        end
+    end)
+
+    return Hub
+end
+
+-- 3. MODIFICACIÓN FINAL: Ejecutar en pcall para capturar errores de ejecución
+local success, result = pcall(crearHubUI)
+
+if success then
+    print("🚀 Script Hub by Foxming cargado correctamente.")
+else
+    warn("❌ Error CRÍTICO al cargar el Hub: " .. result)
+end
         end
     end)
 
